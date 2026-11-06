@@ -299,8 +299,11 @@ async function playClip(startMs, durMs, baseMs = 0) {
     const now = performance.now();
     if (now - t0 >= c.durMs) break;
     const heard = Math.max(0, now - t0 - AUDIO_DELAY_MS);
-    if (ui.done) $('listen-btn').textContent = `■ Stop · ${mmss(startMs + heard)} / ${mmss(ui.track.ms)}`;
-    else renderProgress(c.baseMs + heard);
+    if (ui.done) {
+      ui.listenMs = Math.min(startMs + heard, ui.track.ms);
+      renderSeek();
+      if (ui.listenMs >= ui.track.ms) { ui.listenMs = 0; break; }
+    } else renderProgress(c.baseMs + heard);
     // On long plays, notice the song ending or being paused from elsewhere.
     if (now - lastCheck > 1000) {
       lastCheck = now;
@@ -392,7 +395,7 @@ function search(q) {
 
 // ---------- game ----------
 
-const ui = { playlist: null, track: null, step: 0, attempts: [], done: false, won: false, playing: false, cueing: false, suggestions: [], active: -1 };
+const ui = { playlist: null, track: null, step: 0, attempts: [], done: false, won: false, playing: false, cueing: false, suggestions: [], active: -1, listenMs: 0 };
 
 const nudges = () => store.get('nudges', {});
 // Where the sound starts in each song, measured by measure.html (see build_starts.py),
@@ -416,7 +419,7 @@ function pickTrack() {
 
 async function newRound() {
   await stopClip();
-  Object.assign(ui, { step: 0, attempts: [], done: false, won: false, playing: false, cueing: true });
+  Object.assign(ui, { step: 0, attempts: [], done: false, won: false, playing: false, cueing: true, listenMs: 0 });
   $('guess-input').value = '';
   closeSuggestions();
   render();
@@ -455,8 +458,8 @@ async function play() {
   if (ui.playing) { ui.playing = false; await stopClip(); render(); return; }
   ui.playing = true;
   render();
-  // After the round, play the whole song from the very start.
-  try { await (ui.done ? playClip(0, Infinity) : playClip(startMs(), playMs(ui.step))); } catch (e) { ui.playing = false; render(); showToast(e.message); }
+  // After the round, play the whole song from the seek bar's position.
+  try { await (ui.done ? playClip(ui.listenMs, Infinity) : playClip(startMs(), playMs(ui.step))); } catch (e) { ui.playing = false; render(); showToast(e.message); }
 }
 
 function advance(attempt) {
@@ -474,7 +477,7 @@ function skip() {
   const quick = last && last.trackId === ui.track.id && last.step === ui.step &&
     performance.now() - last.at < CONTINUE_WINDOW_MS;
   advance({ result: 'skip' });
-  if (ui.done) return stopClip().then(() => { ui.playing = false; });
+  if (ui.done) return; // finish() stops the clip and plays the whole song
   // Mid-clip, keep playing through the newly unlocked section instead of stopping.
   if (playing) { clip.durMs = STEPS[ui.step] - clip.baseMs; return; }
   // Right after a long clip ended, carry on from where it stopped.
@@ -499,12 +502,14 @@ function finish(won) {
   ui.done = true;
   ui.won = won;
   ui.playing = false;
-  stopClip();
   const s = store.get('stats', { played: 0, won: 0, streak: 0, best: 0, dist: Array(STEPS.length).fill(0) });
   s.played++;
   if (won) { s.won++; s.streak++; s.best = Math.max(s.best, s.streak); s.dist[ui.step]++; } else s.streak = 0;
   store.set('stats', s);
   render();
+  // Play the whole song right away (the button then stops it), unless the next round already started.
+  const t = ui.track;
+  stopClip().then(() => { if (ui.done && ui.track === t && !ui.playing) play(); });
 }
 
 function nudge() {
@@ -599,8 +604,26 @@ function render() {
     $('reveal-artist').textContent = t.artists.join(', ') + (t.year ? ` · ${t.year}` : '');
     $('reveal-img').src = t.img;
     $('reveal-link').href = 'https://open.spotify.com/track/' + t.id;
-    if (!ui.playing) $('listen-btn').textContent = `▶ Play full song (${mmss(t.ms)})`;
+    $('listen-btn').textContent = ui.playing ? '❚❚ Pause' : ui.listenMs ? '▶ Resume' : '▶ Play full song';
+    renderSeek();
   }
+}
+
+// The seek bar under the revealed song. Left alone while it is being dragged.
+let seekDragging = false;
+function renderSeek() {
+  if (seekDragging || !ui.track) return;
+  $('seek').max = ui.track.ms;
+  $('seek').value = ui.listenMs;
+  $('seek-pos').textContent = mmss(ui.listenMs);
+  $('seek-len').textContent = mmss(ui.track.ms);
+}
+
+function seekTo(ms) {
+  seekDragging = false;
+  ui.listenMs = ms;
+  render();
+  if (ui.playing) playClip(ms, Infinity).catch(e => { ui.playing = false; render(); showToast(e.message); });
 }
 
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -630,6 +653,8 @@ function wire() {
   };
   $('play-btn').onclick = play;
   $('listen-btn').onclick = play;
+  $('seek').oninput = () => { seekDragging = true; $('seek-pos').textContent = mmss(+$('seek').value); };
+  $('seek').onchange = () => seekTo(+$('seek').value);
   $('skip-btn').onclick = skip;
   $('nudge-btn').onclick = nudge;
   $('next-btn').onclick = newRound;
