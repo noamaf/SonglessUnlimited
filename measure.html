@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songless Measure</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>Songless <span>Measure</span></h1></header>
+<main>
+  <section class="card">
+    <p>Finds where the sound starts in every song of the playlist. Chrome will ask to share this tab: pick this tab and tick <b>Also share tab audio</b>.</p>
+    <div class="controls">
+      <button id="start-btn" class="primary">Start measuring</button>
+      <button id="stop-btn" disabled>Stop</button>
+    </div>
+    <p id="progress" class="muted"></p>
+    <div id="toast" class="toast"></div>
+  </section>
+  <details class="debug" open>
+    <summary>Debug log</summary>
+    <button id="copy-debug" type="button">Copy log</button>
+    <pre id="debug-log"></pre>
+  </details>
+</main>
+<script>window.SONGLESS_TOOL = true;</script>
+<script src="app.js"></script>
+<script src="measure.js"></script>
+</body>
+</html>

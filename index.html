@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songless Unlimited</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Songless <span>Unlimited</span></h1>
+  <div id="stats" class="stats"></div>
+</header>
+
+<main>
+  <section id="login" class="card hidden">
+    <h2>Connect Spotify</h2>
+    <p>Spotify only lets the browser play full songs for <b>Premium</b> accounts, so you need one to play.</p>
+    <p class="muted">Your Spotify app must list this redirect URI in its dashboard settings:<br><code id="redirect-uri"></code></p>
+    <button id="login-btn" class="primary">Log in with Spotify</button>
+  </section>
+
+  <section id="loading" class="card hidden"><p id="loading-text">Loading…</p></section>
+
+  <section id="error" class="card error hidden">
+    <p id="error-text"></p>
+    <button id="error-retry">Try again</button>
+  </section>
+
+  <section id="game" class="card hidden">
+    <div class="playlist-line">Playlist: <b id="playlist-name"></b> · <span id="playlist-count"></span> songs</div>
+
+    <ol id="attempts" class="attempts"></ol>
+
+    <div id="timeline" class="timeline"></div>
+
+    <div class="controls">
+      <button id="play-btn" class="primary play">▶ Play</button>
+      <button id="skip-btn">Skip</button>
+    </div>
+    <button id="nudge-btn" class="link">Only heard silence? Move the start 0.25 s later</button>
+    <div id="toast" class="toast"></div>
+
+    <form id="guess-form" class="guess" autocomplete="off">
+      <div class="combo">
+        <input id="guess-input" type="text" placeholder="Know it? Search for the title or artist" spellcheck="false">
+        <ul id="suggestions" class="suggestions hidden"></ul>
+      </div>
+      <button type="submit" class="primary">Guess</button>
+    </form>
+
+    <div id="reveal" class="reveal hidden">
+      <img id="reveal-img" alt="">
+      <div class="reveal-text">
+        <div id="reveal-result" class="reveal-result"></div>
+        <div id="reveal-name" class="reveal-name"></div>
+        <div id="reveal-artist" class="muted"></div>
+        <div class="reveal-actions">
+          <button id="listen-btn">▶ Play full song</button>
+          <a id="reveal-link" target="_blank" rel="noopener">Open in Spotify</a>
+        </div>
+      </div>
+      <button id="next-btn" class="primary next">Next song →</button>
+    </div>
+  </section>
+
+  <section id="settings" class="settings hidden">
+    <form id="playlist-form">
+      <input id="playlist-input" type="text" placeholder="Paste another Spotify playlist link">
+      <button type="submit">Load</button>
+      <button type="button" id="default-playlist-btn">Back to Guess that Tune.</button>
+    </form>
+    <label class="volume">Volume <input id="volume" type="range" min="0" max="1" step="0.05"></label>
+    <button id="logout-btn" class="link">Log out</button>
+  </section>
+
+  <details class="debug">
+    <summary>Debug log</summary>
+    <button id="copy-debug" type="button">Copy log</button>
+    <pre id="debug-log"></pre>
+  </details>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
