@@ -7,8 +7,9 @@ const REDIRECT_URI = location.origin + location.pathname;
 const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
 const DEFAULT_PLAYLIST = '6QAKnenuZoowNqxRzZbeRg'; // "Guess that Tune." by Ben
 const STEPS = [100, 500, 1000, 2000, 4000, 8000, 16000]; // ms of song unlocked per attempt
-// The first level is labelled 0.1 s but plays 0.15 s: at a true 0.1 s most songs barely make a sound.
-const playMs = step => (step === 0 ? 150 : STEPS[step]);
+// The first level is labelled 0.1 s but plays 0.2 s: most songs are at full volume within 0.05 s,
+// but 0.1-0.15 s of sound is too short to hear a note.
+const playMs = step => (step === 0 ? 200 : STEPS[step]);
 const NUDGE_MS = 250;
 
 const $ = id => document.getElementById(id);
@@ -271,15 +272,16 @@ const AUDIO_DELAY_MS = 130;
 
 // The clip being played. skip() raises its durMs to keep it going into the next section.
 // baseMs is how much of the level was already heard before startMs (when continuing).
+// full is the whole song after the round, shown on the seek bar instead of the timeline.
 let clip = null;
-// Where the last clip of 2 s or more stopped by itself, so a quick Skip can carry on from there.
+// Where the last clip of 0.5 s or more stopped by itself, so a quick Skip can carry on from there.
 let lastClipEnd = null;
-const CONTINUE_MIN_MS = 2000;
+const CONTINUE_MIN_MS = 500;
 const CONTINUE_WINDOW_MS = 3000;
 
 async function playClip(startMs, durMs, baseMs = 0) {
   const id = ++clipId;
-  const c = clip = { durMs, baseMs };
+  const c = clip = { durMs, baseMs, full: durMs === Infinity };
   lastClipEnd = null;
   await cmd('pause');
   await cmd('seek', startMs);
@@ -299,7 +301,7 @@ async function playClip(startMs, durMs, baseMs = 0) {
     const now = performance.now();
     if (now - t0 >= c.durMs) break;
     const heard = Math.max(0, now - t0 - AUDIO_DELAY_MS);
-    if (ui.done) {
+    if (c.full) {
       ui.listenMs = Math.min(startMs + heard, ui.track.ms);
       renderSeek();
       if (ui.listenMs >= ui.track.ms) { ui.listenMs = 0; break; }
@@ -378,7 +380,8 @@ let searchIndex = [];
 
 function buildSearchIndex(tracks) {
   const byKey = new Map();
-  for (const t of tracks) if (!byKey.has(songKey(t))) byKey.set(songKey(t), { t, hay: norm(t.name + ' ' + t.artists.join(' ')), name: norm(t.name) });
+  // Title and artists are cleaned up separately: norm() drops everything after " - " in a title.
+  for (const t of tracks) if (!byKey.has(songKey(t))) byKey.set(songKey(t), { t, hay: [t.name, ...t.artists].map(norm).join(' '), name: norm(t.name) });
   searchIndex = [...byKey.values()];
 }
 
@@ -491,6 +494,28 @@ function skip() {
   stopClip().then(() => { ui.playing = false; });
 }
 
+// During a round, a click on an unlocked part of the timeline plays from that point to the end of the unlocked part.
+// After the round, a click on a section plays the song from its start up to the end of that section.
+function playFrom(e) {
+  const cell = e.target.closest('.cell');
+  if (ui.cueing || !ui.track || !cell?.classList.contains('open')) return;
+  const i = [...$('timeline').querySelectorAll('.cell')].indexOf(cell);
+  const fail = err => { ui.playing = false; render(); showToast(err.message); };
+  if (ui.done) {
+    ui.playing = true;
+    render();
+    return playClip(startMs(), playMs(i)).catch(fail);
+  }
+  const r = cell.getBoundingClientRect();
+  const lo = i ? STEPS[i - 1] : 0;
+  const end = playMs(ui.step);
+  // Leave at least 0.1 s to hear.
+  const at = Math.max(0, Math.min(lo + (e.clientX - r.left) / r.width * (STEPS[i] - lo), end - 100));
+  ui.playing = true;
+  render();
+  playClip(startMs() + at, end - at, at).catch(fail);
+}
+
 function submitGuess(t) {
   if (ui.done || ui.cueing || !ui.track || !t) return;
   $('guess-input').value = '';
@@ -584,6 +609,7 @@ function render() {
       STEPS.map(ms => `<div class="label">${fmt(ms)}</div>`).join('');
   }
   $('timeline').querySelectorAll('.cell').forEach((c, i) => c.classList.toggle('open', i < open));
+  $('timeline').classList.toggle('seekable', !!ui.track && !ui.cueing);
 
   const dur = STEPS[ui.step];
   const idle = ui.cueing || !ui.track;
@@ -655,6 +681,7 @@ function wire() {
   $('listen-btn').onclick = play;
   $('seek').oninput = () => { seekDragging = true; $('seek-pos').textContent = mmss(+$('seek').value); };
   $('seek').onchange = () => seekTo(+$('seek').value);
+  $('timeline').onclick = playFrom;
   $('skip-btn').onclick = skip;
   $('nudge-btn').onclick = nudge;
   $('next-btn').onclick = newRound;
