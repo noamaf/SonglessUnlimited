@@ -1,4 +1,4 @@
-// Songless Unlimited: guess a song from the first 0.1 s, 0.2 s, 0.5 s, ... of it.
+// Songless Unlimited: guess a song from the first 0.1 s, 0.7 s, 2 s, ... of it.
 // Audio comes from the Spotify Web Playback SDK (Premium only). Login uses PKCE,
 // so the client secret is never needed in the browser.
 
@@ -6,7 +6,7 @@ const CLIENT_ID = '2eb6f769c3bd4297a445fc13a4311b33';
 const REDIRECT_URI = location.origin + location.pathname;
 const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
 const DEFAULT_PLAYLIST = '6QAKnenuZoowNqxRzZbeRg'; // "Guess that Tune." by Ben
-const STEPS = [100, 500, 1000, 2000, 4000, 8000, 16000]; // ms of song unlocked per attempt
+const STEPS = [100, 700, 2000, 4000, 8000, 16000]; // ms of song unlocked per attempt
 // The first level is labelled 0.1 s but plays 0.2 s: most songs are at full volume within 0.05 s,
 // but 0.1-0.15 s of sound is too short to hear a note.
 const playMs = step => (step === 0 ? 200 : STEPS[step]);
@@ -336,16 +336,17 @@ async function loadDefaultPlaylist() {
 async function fetchPlaylist(id) {
   const meta = await api(`/playlists/${id}?fields=name`);
   const tracks = [], seen = new Set();
-  let url = `/playlists/${id}/tracks?limit=100&market=from_token&fields=next,items(track(id,name,is_local,is_playable,duration_ms,artists(name),album(name,release_date,images)))`;
+  let url = `/playlists/${id}/tracks?limit=100&market=from_token&fields=next,items(track(id,type,name,is_local,is_playable,duration_ms,artists(name),album(name,release_date,images)))`;
   while (url) {
     $('loading-text').textContent = `Loading ${meta.name}… ${tracks.length} songs`;
     const d = await api(url);
     for (const { track: t } of d.items) {
-      if (!t || t.is_local || !t.id || t.is_playable === false || seen.has(t.id)) continue;
+      // Playlists can also hold podcast episodes, which have no artists.
+      if (!t || t.type !== 'track' || t.is_local || !t.id || !t.name || t.is_playable === false || seen.has(t.id)) continue;
       seen.add(t.id);
       const imgs = t.album?.images || [];
       tracks.push({
-        id: t.id, name: t.name, artists: t.artists.map(a => a.name), album: t.album?.name || '',
+        id: t.id, name: t.name, artists: (t.artists || []).map(a => a.name).filter(Boolean), album: t.album?.name || '',
         year: (t.album?.release_date || '').slice(0, 4), img: (imgs[1] || imgs[0])?.url || '', ms: t.duration_ms,
       });
     }
@@ -364,7 +365,7 @@ const norm = s => s.toLowerCase()
   .replace(/\s*[([].*?[)\]]/g, '')   // (feat. X), [Remastered]
   .replace(/\s+-\s+.*$/, '')          // " - 2011 Remaster", " - Radio Edit"
   .replace(/&/g, 'and')
-  .replace(/[^a-z0-9 ]/g, '')
+  .replace(/[^\p{L}\p{N} ]/gu, '')   // keep letters in any language (Hebrew too); drops punctuation and vowel marks
   .replace(/\s+/g, ' ').trim();
 
 const songKey = t => norm(t.name) + '|' + norm(t.artists[0] || '');
@@ -392,7 +393,6 @@ function search(q) {
   return searchIndex
     .filter(e => words.every(w => e.hay.includes(w)))
     .sort((a, b) => (b.name.startsWith(qn) - a.name.startsWith(qn)) || a.name.length - b.name.length)
-    .slice(0, 8)
     .map(e => e.t);
 }
 
@@ -661,6 +661,8 @@ function renderSuggestions() {
   list.classList.toggle('hidden', !ui.suggestions.length);
   list.innerHTML = ui.suggestions.map((t, i) =>
     `<li data-i="${i}" class="${i === ui.active ? 'active' : ''}">${esc(t.name)} <span class="artist">— ${esc(t.artists.slice(0, 2).join(', ') + (t.artists.length > 2 ? ', …' : ''))}</span></li>`).join('');
+  // The list scrolls; keep the arrow-key choice in view.
+  list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
 }
 
 function closeSuggestions() {

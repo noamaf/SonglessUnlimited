@@ -86,7 +86,7 @@ input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px;
 .attempts li.right .what::before { content: "✓ "; color: var(--good); font-weight: 700; }
 .attempts li.close .note { color: var(--close); font-size: 0.8rem; margin-left: 6px; }
 
-.timeline { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 4px; }
+.timeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 4px; }
 .timeline .cell { position: relative; height: 12px; border-radius: 3px; background: var(--slot); overflow: hidden; }
 .timeline .cell.open { background: color-mix(in srgb, var(--accent) 30%, var(--slot)); }
 .timeline.seekable .cell.open { cursor: pointer; }
