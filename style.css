@@ -78,7 +78,7 @@ input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px;
 }
 .attempts li .len { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .attempts li.current { border-color: var(--accent); }
-.attempts li.skip .what { color: var(--muted); }
+.attempts li.skip .what, .attempts li.giveup .what { color: var(--muted); }
 .attempts li.wrong { background: var(--bad-bg); border-color: var(--bad-line); }
 .attempts li.close { background: var(--close-bg); border-color: var(--close-line); }
 .attempts li.wrong .what::before { content: "✗ "; color: var(--bad); font-weight: 700; }

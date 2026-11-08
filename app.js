@@ -516,6 +516,12 @@ function playFrom(e) {
   playClip(startMs() + at, end - at, at).catch(fail);
 }
 
+function giveUp() {
+  if (ui.done || ui.cueing || !ui.track) return;
+  ui.attempts.push({ result: 'giveup' });
+  finish(false);
+}
+
 function submitGuess(t) {
   if (ui.done || ui.cueing || !ui.track || !t) return;
   $('guess-input').value = '';
@@ -576,7 +582,10 @@ function setStatus(msg) {
 
 function renderStats() {
   const s = store.get('stats', null);
-  $('stats').innerHTML = s ? `Streak <b>${s.streak}</b> · Best <b>${s.best}</b> · Won <b>${s.won}</b>/${s.played}` : '';
+  // The average attempt a song was guessed on, over won songs. dist[i] counts wins on attempt i + 1.
+  const avg = s?.won ? s.dist.reduce((sum, n, i) => sum + n * (i + 1), 0) / s.won : null;
+  $('stats').innerHTML = s ? `Streak <b>${s.streak}</b> · Best <b>${s.best}</b> · Won <b>${s.won}</b>/${s.played}` +
+    (avg ? ` · Avg <b>${avg.toFixed(1)}</b> tries` : '') : '';
 }
 
 function renderProgress(elapsed) {
@@ -599,6 +608,7 @@ function render() {
     const cls = a ? a.result : (i === ui.step && !ui.done ? 'current' : '');
     let what = '';
     if (a?.result === 'skip') what = 'Skipped';
+    else if (a?.result === 'giveup') what = 'Gave up';
     else if (a) what = esc(`${a.guess.name} — ${a.guess.artists.join(', ')}`) + (a.result === 'close' ? '<span class="note">right artist</span>' : '');
     return `<li class="${cls}"><span class="what">${what}</span><span class="len">${fmt(ms)}</span></li>`;
   }).join('');
@@ -616,7 +626,10 @@ function render() {
   $('play-btn').disabled = ui.cueing && !ui.autoplayBlocked;
   $('play-btn').textContent = ui.autoplayBlocked ? '🔊 Allow audio' : ui.cueing ? 'Loading song…' : !ui.track ? '▶ Start' : ui.playing ? '■ Stop' : `▶ Play ${fmt(dur)}`;
   $('skip-btn').disabled = ui.done || idle;
-  $('skip-btn').textContent = ui.step < STEPS.length - 1 ? `Skip (+${fmt(STEPS[ui.step + 1] - STEPS[ui.step])})` : 'Give up';
+  // On the last attempt a skip would just lose, which is what Give up does.
+  $('skip-btn').classList.toggle('hidden', ui.step === STEPS.length - 1);
+  if (ui.step < STEPS.length - 1) $('skip-btn').textContent = `Skip (+${fmt(STEPS[ui.step + 1] - STEPS[ui.step])})`;
+  $('giveup-btn').disabled = ui.done || idle;
   $('nudge-btn').classList.toggle('hidden', ui.done || idle);
   $('guess-form').classList.toggle('hidden', ui.done || idle);
 
@@ -624,7 +637,7 @@ function render() {
   $('play-btn').parentElement.classList.toggle('hidden', ui.done);
   if (ui.done) {
     const t = ui.track;
-    $('reveal-result').textContent = ui.won ? `Got it in ${fmt(STEPS[ui.step])}` : 'Out of guesses';
+    $('reveal-result').textContent = ui.won ? `Got it in ${fmt(STEPS[ui.step])}` : ui.attempts.at(-1)?.result === 'giveup' ? 'You gave up' : 'Out of guesses';
     $('reveal-result').className = 'reveal-result ' + (ui.won ? 'won' : 'lost');
     $('reveal-name').textContent = t.name;
     $('reveal-artist').textContent = t.artists.join(', ') + (t.year ? ` · ${t.year}` : '');
@@ -685,6 +698,7 @@ function wire() {
   $('seek').onchange = () => seekTo(+$('seek').value);
   $('timeline').onclick = playFrom;
   $('skip-btn').onclick = skip;
+  $('giveup-btn').onclick = giveUp;
   $('nudge-btn').onclick = nudge;
   $('next-btn').onclick = newRound;
   $('logout-btn').onclick = () => { store.del('auth'); player?.disconnect(); location.reload(); };
