@@ -368,6 +368,14 @@ const norm = s => s.toLowerCase()
   .replace(/[^\p{L}\p{N} ]/gu, '')   // keep letters in any language (Hebrew too); drops punctuation and vowel marks
   .replace(/\s+/g, ' ').trim();
 
+// For search: keeps the words in brackets and after " - ", so "I Got You (I Feel Good)" is found by "i feel good".
+const searchNorm = s => s.toLowerCase()
+  .normalize('NFD').replace(/\p{M}/gu, '')   // accents and Hebrew vowel marks
+  .replace(/&/g, 'and')
+  .replace(/[()[\]{}]/g, ' ')
+  .replace(/[^\p{L}\p{N}\s]/gu, '')          // like norm(): "AC/DC" → "acdc", "don't" → "dont"
+  .replace(/\s+/g, ' ').trim();
+
 const songKey = t => norm(t.name) + '|' + norm(t.artists[0] || '');
 
 function judge(guess, answer) {
@@ -381,18 +389,18 @@ let searchIndex = [];
 
 function buildSearchIndex(tracks) {
   const byKey = new Map();
-  // Title and artists are cleaned up separately: norm() drops everything after " - " in a title.
-  for (const t of tracks) if (!byKey.has(songKey(t))) byKey.set(songKey(t), { t, hay: [t.name, ...t.artists].map(norm).join(' '), name: norm(t.name) });
+  for (const t of tracks) if (!byKey.has(songKey(t))) byKey.set(songKey(t), { t, hay: [t.name, ...t.artists].map(searchNorm).join(' '), name: searchNorm(t.name) });
   searchIndex = [...byKey.values()];
 }
 
 function search(q) {
-  const words = norm(q).split(' ').filter(Boolean);
+  const words = searchNorm(q).split(' ').filter(Boolean);
   if (!words.length) return [];
   const qn = words.join(' ');
   return searchIndex
     .filter(e => words.every(w => e.hay.includes(w)))
-    .sort((a, b) => (b.name.startsWith(qn) - a.name.startsWith(qn)) || a.name.length - b.name.length)
+    // Titles that start with the typed words first, then titles that contain them as a phrase, then the shortest.
+    .sort((a, b) => (b.name.startsWith(qn) - a.name.startsWith(qn)) || (b.name.includes(qn) - a.name.includes(qn)) || a.name.length - b.name.length)
     .map(e => e.t);
 }
 
@@ -617,6 +625,9 @@ function render() {
   if (!$('timeline').children.length) {
     $('timeline').innerHTML = STEPS.map(() => '<div class="cell"><div class="fill"></div></div>').join('') +
       STEPS.map(ms => `<div class="label">${fmt(ms)}</div>`).join('');
+    // Each section's width grows with the square root of its length: the 8 s section is 9 times
+    // the 0.1 s one rather than 80 times, and no section is narrower than 28 px, so all stay clickable.
+    $('timeline').style.gridTemplateColumns = STEPS.map((ms, i) => `minmax(28px, ${Math.sqrt(ms - (i ? STEPS[i - 1] : 0)).toFixed(1)}fr)`).join(' ');
   }
   $('timeline').querySelectorAll('.cell').forEach((c, i) => c.classList.toggle('open', i < open));
   $('timeline').classList.toggle('seekable', !!ui.track && !ui.cueing);
